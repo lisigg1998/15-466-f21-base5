@@ -26,21 +26,8 @@
 #include <memory>
 #include <algorithm>
 
-#ifdef _WIN32
-extern "C" { uint32_t GetACP(); }
-#endif
 int main(int argc, char **argv) {
 #ifdef _WIN32
-	{ //when compiled on windows, check that code page is forced to utf-8 (makes file loading/saving work right):
-		//see: https://docs.microsoft.com/en-us/windows/apps/design/globalizing/use-utf8-code-page
-		uint32_t code_page = GetACP();
-		if (code_page == 65001) {
-			std::cout << "Code page is properly set to UTF-8." << std::endl;
-		} else {
-			std::cout << "WARNING: code page is set to " << code_page << " instead of 65001 (UTF-8). Some file handling functions may fail." << std::endl;
-		}
-	}
-
 	//when compiled on windows, unhandled exceptions don't have their message printed, which can make debugging simple issues difficult.
 	try {
 #endif
@@ -66,7 +53,7 @@ int main(int argc, char **argv) {
 
 	//create window:
 	SDL_Window *window = SDL_CreateWindow(
-		"gp21 game5: walking simulator", //TODO: remember to set a title for your game!
+		"Pac Man: Invisible Ghost", //TODO: remember to set a title for your game!
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 		1280, 720, //TODO: modify window size if you'd like
 		SDL_WINDOW_OPENGL

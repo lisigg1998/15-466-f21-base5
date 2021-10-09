@@ -42,8 +42,11 @@ WalkMesh::WalkMesh(std::vector< glm::vec3 > const &vertices_, std::vector< glm::
 
 //project pt to the plane of triangle a,b,c and return the barycentric weights of the projected point:
 glm::vec3 barycentric_weights(glm::vec3 const &a, glm::vec3 const &b, glm::vec3 const &c, glm::vec3 const &pt) {
-	//TODO: implement!
-	return glm::vec3(0.25f, 0.25f, 0.5f);
+	glm::vec3 result;
+	result.z = (glm::dot(pt-a, b-a) * glm::dot(b-a, c-b) - glm::dot(pt-a, c-b) * glm::dot(b-a, b-a)) / (glm::dot(c-a, b-a) * glm::dot(b-a, c-b) - glm::dot(b-a, b-a) * glm::dot(c-a, c-b));
+	result.y = (glm::dot(pt-c, a-c) * glm::dot(a-c, b-a) - glm::dot(pt-c, b-a) * glm::dot(a-c, a-c)) / (glm::dot(b-c, a-c) * glm::dot(a-c, b-a) - glm::dot(a-c, a-c) * glm::dot(b-c, b-a));
+	result.x = 1.0f - result.z - result.y;
+	return result;
 }
 
 WalkPoint WalkMesh::nearest_walk_point(glm::vec3 const &world_point) const {
@@ -120,22 +123,33 @@ void WalkMesh::walk_in_triangle(WalkPoint const &start, glm::vec3 const &step, W
 	assert(time_);
 	auto &time = *time_;
 
-	glm::vec3 step_coords;
-	{ //project 'step' into a barycentric-coordinates direction:
-		//TODO
-		step_coords = glm::vec3(0.0f);
-	}
+	glm::vec3 const &a = vertices[start.indices.x];
+	glm::vec3 const &b = vertices[start.indices.y];
+	glm::vec3 const &c = vertices[start.indices.z];
+
+	glm::vec3 step_coords = barycentric_weights(a, b, c, step) - barycentric_weights(a, b, c, glm::vec3(0.0f, 0.0f, 0.0f));
 	
 	//if no edge is crossed, event will just be taking the whole step:
 	time = 1.0f;
 	end = start;
 
-	//figure out which edge (if any) is crossed first.
-	// set time and end appropriately.
-	//TODO
+	if (start.weights.x + step_coords.x <= 0) time = glm::min(time, -(start.weights.x / step_coords.x));
+	if (start.weights.y + step_coords.y <= 0) time = glm::min(time, -(start.weights.y / step_coords.y));
+	if (start.weights.z + step_coords.z <= 0) time = glm::min(time, -(start.weights.z / step_coords.z));
+	
+	end.weights = start.weights + time * step_coords;
 
-	//Remember: our convention is that when a WalkPoint is on an edge,
-	// then wp.weights.z == 0.0f (so will likely need to re-order the indices)
+	const float EPSILON = 0.0000001f;
+	// crossed an edge, reorder points
+	if (end.weights.x <= EPSILON) {
+		end.indices = glm::uvec3(start.indices.y, start.indices.z, start.indices.x);
+		end.weights = glm::vec3(end.weights.y, end.weights.z, 0.0f);
+	} else if (end.weights.y <= EPSILON) {
+		end.indices = glm::uvec3(start.indices.z, start.indices.x, start.indices.y);
+		end.weights = glm::vec3(end.weights.z, end.weights.x, 0.0f);
+	} else if (end.weights.z <= EPSILON) {
+		end.weights = glm::vec3(end.weights.x, end.weights.y, 0.0f);
+	}
 }
 
 bool WalkMesh::cross_edge(WalkPoint const &start, WalkPoint *end_, glm::quat *rotation_) const {
@@ -149,15 +163,24 @@ bool WalkMesh::cross_edge(WalkPoint const &start, WalkPoint *end_, glm::quat *ro
 	glm::uvec2 edge = glm::uvec2(start.indices);
 
 	//check if 'edge' is a non-boundary edge:
-	if (edge.x == edge.y /* <-- TODO: use a real check, this is just here so code compiles */) {
-		//it is!
-
-		//make 'end' represent the same (world) point, but on triangle (edge.y, edge.x, [other point]):
-		//TODO
-
-		//make 'rotation' the rotation that takes (start.indices)'s normal to (end.indices)'s normal:
-		//TODO
-
+	auto f = next_vertex.find(glm::uvec2(start.indices.y, start.indices.x));
+	if (f != next_vertex.end()) {
+		end.indices.x = start.indices.y;
+		end.indices.y = start.indices.x;
+		end.indices.z = f->second;
+		
+		end.weights.x = start.weights.y;
+		end.weights.y = start.weights.x;
+		end.weights.z = 0.0f;
+		
+		glm::vec3 norm1 = glm::cross(vertices[start.indices.y] - vertices[start.indices.x], vertices[start.indices.z] - vertices[start.indices.y]);
+		norm1 = norm1 / glm::length(norm1);
+		
+		glm::vec3 norm2 = glm::cross(vertices[end.indices.y] - vertices[end.indices.x], vertices[end.indices.z] - vertices[end.indices.y]);
+		norm2 = norm2 / glm::length(norm2);
+		
+		rotation = glm::rotation(norm1, norm2);
+		
 		return true;
 	} else {
 		end = start;
